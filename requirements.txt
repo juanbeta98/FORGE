@@ -1,0 +1,9 @@
+fastapi>=0.110,<1.0
+uvicorn[standard]>=0.29,<1.0
+garminconnect>=0.2.8,<0.3
+python-dotenv>=1.0,<2.0
+# Pinned <2: this venv's Python (macOS Command Line Tools python3) links
+# against LibreSSL, not OpenSSL — urllib3 v2 warns loudly (NotOpenSSLWarning)
+# about that combination on every request. Harmless but noisy; v1.26 doesn't
+# have that check and requests/garth/garminconnect work fine on either.
+urllib3>=1.26,<2.0

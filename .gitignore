@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+data/*.db
+data/*.db-journal
+data/*.bak-*
+data/.garmin_session/
+.env
+.DS_Store

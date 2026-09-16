@@ -1,0 +1,890 @@
+:root {
+  --bg: #0b0c0e;
+  --card: #17181b;
+  --surface-2: #1e2023;
+  --card-border: #202226;
+  --text: #f2f2f0;
+  --muted: #9a9ca3;
+  --text-dim: #5f6266;
+  --accent: #8c1c3e;
+  --accent-light: #b23a5e;
+  --accent-dim: #3a0f1c;
+  --accent-tint: rgba(140, 28, 62, 0.08);
+  --gold: #d5b94c;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+
+  /* Forge Grid intensity — crimson-derived, deliberately not GitHub green.
+     Completion belongs to FORGE's red/crimson visual system. Progression is
+     tuned so each step is unmistakable, not a gentle gradient. */
+  --effort-pretrack: #202124; /* before the habit existed — a faint gray, visible but clearly weaker than a real zero day */
+  --effort-0: #2c2e32;        /* tracked, zero effort — a very dark gray */
+  --effort-1: #4a1522;        /* 1–24% — very dark burgundy */
+  --effort-2: #6e1a2f;        /* 25–49% — dark crimson */
+  --effort-3: #96223f;        /* 50–74% — medium crimson */
+  --effort-4: #c22f52;        /* 75–99% — bright crimson */
+  --effort-5: #ff3b5c;        /* 100% — full FORGE accent */
+
+  /* Neon per-habit colors for Pushups/Squats/Crunches and Sleep — set as
+     inline styles from JS (app.js NEON_EXERCISE_COLORS / NEON_SLEEP_COLOR)
+     so a Today progress bar and its matching Exercise-chart line are always
+     literally the same value, never two colors that can drift apart. */
+  --neon-green: #39ff88;
+  --neon-pink: #ff3fa4;
+  --neon-orange: #ff9f1c;
+  --neon-blue: #2ec4ff;
+}
+
+* { box-sizing: border-box; }
+
+/* Any element using [hidden] must actually disappear, regardless of what
+   display value a more specific component rule (flex, grid, ...) gives it
+   elsewhere in this file — author rules otherwise beat the browser's default
+   [hidden] behavior. */
+[hidden] { display: none !important; }
+
+/* Native number-input spin buttons sit right on top of a narrow field's
+   digits, making the value unreadable/hard to edit — every number input in
+   the app relies on typing + the Enter-to-jump flow instead, not spinners. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* This dashboard lives on a dedicated screen — it must read as one
+   persistent view, not a webpage with sections to scroll through. html/body
+   are pinned to exactly the viewport height; .top-bar takes its natural
+   (unchanged) size, .page gets everything left and never overflows it. */
+html { height: 100%; }
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- Header ---------- */
+
+/* Reads as three zones — brand+status (fixed-width, compact) | quote (the
+   large flexible middle, centered within its own territory rather than the
+   whole row) | settings (fixed-width) — not six competing pieces of text. */
+.top-bar {
+  flex: 0 0 auto; /* fixed to its own content size — never shrinks to make room, never grows to take leftover space */
+  display: flex;
+  align-items: center;
+  min-height: 60px;
+  padding: 6px var(--space-6);
+  border-bottom: 1px solid var(--card-border);
+}
+
+.brand {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-weight: 700;
+  letter-spacing: 2px;
+  font-size: 15px;
+  color: var(--accent);
+  margin-right: 48px; /* a clearly bigger gap here than within the stats group, so FORGE | date+stats reads as two clusters, not one run of text */
+}
+.logo-mark { display: block; flex: 0 0 auto; }
+
+.status-metrics {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-5);
+  white-space: nowrap;
+}
+#status-date { color: var(--muted); font-weight: 500; font-size: 13px; }
+.status-stats { display: flex; align-items: baseline; gap: 11px; }
+/* Neutral at zero, stepping toward the accent only as progress is actually
+   earned (color is set inline per-value in JS) — status text stays quieter
+   than the quote regardless. */
+#status-today, #status-week, #status-streak { color: var(--muted); font-size: 13px; font-weight: 700; }
+
+.quote-box {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0 var(--space-6);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.92;
+}
+.quote-box:hover { background: transparent; opacity: 1; }
+.quote-box .quote-line {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-align: center;
+  line-height: 1.2;
+}
+.quote-box .quote-text {
+  font-style: italic;
+  font-weight: 600;
+  font-size: 15.5px;
+  color: var(--text);
+}
+.quote-box .quote-author {
+  font-style: normal;
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 8px;
+}
+
+.icon-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.07); /* deliberately quiet — Settings is rarely used and shouldn't compete with the quote */
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+.icon-btn:hover { border-color: var(--accent); }
+
+/* ---------- Page / layout ---------- */
+
+/* Everything below the header lives in this one fixed-height region —
+   .top-row takes only the (compressed) height its own content needs,
+   #proof-card is given every pixel that's left (see #proof-card below).
+   That's what guarantees zero page scroll on any viewport height, rather
+   than chasing an exact percentage split that would break the moment
+   habit counts or a browser's chrome height differ from what was tuned. */
+.page {
+  flex: 1 1 auto;
+  min-height: 0; /* lets this flex child actually be constrained to the remaining space instead of overflowing to fit its content */
+  overflow: hidden;
+  max-width: 1440px;
+  margin: 0 auto;
+  width: 100%;
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+@media (min-width: 1650px) {
+  .page { max-width: 1600px; }
+}
+
+.top-row {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-columns: minmax(460px, 13fr) minmax(260px, 7fr); /* ~65/35 — Today now has Exercise+Wellness side by side and can use the extra width */
+  gap: var(--space-3);
+  align-items: stretch; /* Today and This Week end at the same height, so Proof of Work below starts at one clean, even edge instead of a staircase */
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 12px var(--space-4); /* trimmed vertically (was var(--space-4)=16px all round) — recovers height without touching type */
+  min-width: 0; /* let grid items shrink instead of forcing the track wider */
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.card h2 {
+  margin: 0;
+  font-size: 15px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text);
+  font-weight: 700;
+}
+.card h3 {
+  font-size: 14px;
+  color: var(--muted);
+  margin: var(--space-4) 0 var(--space-2);
+}
+.card-badge {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent-light);
+  white-space: nowrap;
+}
+/* The weekly % in the header is the primary metric — this count is useful
+   detail, not a competing headline, so it stays visually quieter. */
+#week-badge { font-size: 12px; font-weight: 600; color: var(--muted); }
+
+.section-heading {
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+  margin: 0; /* .rows already provides gap between it and its siblings — its own margin would double up */
+}
+
+/* Exercise's own heading row carries the day-type toggle — it's the only
+   section this affects, so it doesn't live in the page header. */
+.section-heading-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.day-type-toggle { display: flex; gap: 2px; background: var(--surface-2); border-radius: 999px; padding: 2px; }
+.day-type-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.2px;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.day-type-btn:hover { background: transparent; color: var(--text); }
+.day-type-btn.active { background: var(--accent); color: #f9eef1; }
+.day-type-btn.active:hover { background: var(--accent-light); }
+
+.rows { display: flex; flex-direction: column; gap: 5px; }
+
+/* Today: Exercise and Wellness side by side inside one card, rather than
+   stacked — this is what actually shortens the card and the progress bars
+   (which no longer span the full card width), not a page-level 3rd column.
+   Exercise gets the larger share now that it holds 6 quantitative rows
+   instead of 3. */
+.today-columns { display: grid; grid-template-columns: 61% 1fr; gap: var(--space-3); } /* ~61/39 Exercise/Wellness balance */
+.today-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; } /* gap between the EXERCISE/WELLNESS label and its rows, and between rows */
+
+/* Exercise: 2 columns x N rows (auto-flow:column, so items 1..N fill the
+   left column top-to-bottom before item N+1 starts the right column) —
+   this is what keeps 6 exercises from doubling Today's height. Rows are
+   narrower now, so names get a fixed (not just min) width so every row in
+   a column lines up, and the progress bar/value/target columns tighten to
+   match — see the .exercise-grid overrides below .bool-grid. */
+.exercise-grid { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: column; column-gap: var(--space-3); row-gap: 4px; }
+.exercise-grid .habit-row { padding: 6px 8px; gap: 6px; }
+.exercise-grid .habit-row.numeric .name { flex: 0 0 auto; width: 78px; overflow: hidden; white-space: nowrap; }
+.exercise-grid .progress-track { min-width: 16px; }
+
+/* The 4 binary Wellness habits compact into a 2-column grid rather than a
+   tall single-file list, leaving room for Sleep's full-width row below. */
+.today-col-wellness .bool-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+
+/* Wellness queue: a FIXED 2x2 slot area (explicit 2 row-tracks) — this is
+   the key requirement. Whether 0, 1, 2, 3 or 4 practices are selected, the
+   grid's own footprint never changes; only what's inside each cell does.
+   Sleep (rendered separately, after this) never moves as a result. */
+.wellness-queue { grid-template-rows: repeat(2, minmax(38px, auto)); }
+.wellness-empty {
+  grid-column: 1 / -1;
+  grid-row: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-style: italic;
+}
+.wellness-slot { position: relative; min-width: 0; }
+/* Nearly invisible at rest, reveals on hover — matches the same restraint
+   as the This Week rows' delete affordance elsewhere in the app, rather
+   than a permanent × cluttering a row used every day. */
+.wellness-remove-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  border: none;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 18px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.wellness-slot:hover .wellness-remove-btn { opacity: 1; }
+.wellness-remove-btn:hover { background: var(--accent); color: #f9eef1; }
+
+/* + Add: a compact pill next to the WELLNESS heading, not a permanent
+   dropdown — opens a small popover of only the not-yet-selected practices. */
+.wellness-add-wrap { position: relative; flex: 0 0 auto; }
+.wellness-add-btn {
+  background: transparent;
+  border: 1px solid var(--card-border);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+.wellness-add-btn:hover { background: transparent; border-color: var(--accent-light); color: var(--accent-light); }
+.wellness-add-btn:disabled { opacity: 0.4; cursor: default; }
+.wellness-add-btn:disabled:hover { border-color: var(--card-border); color: var(--muted); }
+.wellness-add-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 5;
+  min-width: 170px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 4px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.wellness-add-menu button {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  font-weight: 500;
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+.wellness-add-menu button:hover { background: var(--surface-2); }
+
+/* ---------- Today: habit rows (numeric = inline progress bar; boolean = clickable label) ---------- */
+
+.habit-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  min-height: 38px;
+}
+.habit-row.complete { box-shadow: inset 0 0 0 1px var(--accent-light); background: var(--accent-tint); }
+/* Weekend: Exercise habits are still visible and still loggable (a bonus
+   session should still be easy to record), just visually stepped back and
+   excluded from Today's % — "not tracked today" replaces the /target text. */
+.habit-row.excluded-today { opacity: 0.55; }
+.habit-row.excluded-today .progress-text { font-style: italic; }
+.habit-row .name { font-weight: 600; font-size: 14px; }
+.habit-row.numeric .name { flex: 0 0 auto; min-width: 84px; }
+.today-col-wellness .habit-row .name { flex: 1; min-width: 0; font-size: 13px; }
+
+.progress-track {
+  flex: 1;
+  height: 7px;
+  min-width: 30px;
+  background: #34373c; /* bright enough to read as an empty track, not just vanish at 0% */
+  border-radius: 4px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  transition: width 200ms ease;
+}
+.habit-row.complete .progress-fill { background: var(--accent-light); }
+
+/* Input + "/target" are one visual cluster, tight together and set apart
+   from the progress bar before them. */
+.value-group { flex: 0 0 auto; display: flex; align-items: center; gap: 4px; }
+.habit-row input[type="number"] {
+  width: 48px; /* comfortably fits three digits now that the spin buttons are gone */
+  flex: 0 0 auto;
+  background: #0f1012;
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 5px 6px;
+  font-size: 14px;
+  text-align: right;
+}
+.habit-row .progress-text {
+  flex: 0 0 auto;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.habit-row input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+label.habit-row { cursor: pointer; }
+
+/* Sleep: Duration and Score are two independent measurements — never one
+   blended number/bar. Reads left to right as SLEEP → [hh:mm] → [score]/100
+   → score bar, all on one row (no second line, same compactness as every
+   other habit row). No DURATION/SCORE text labels — the hh:mm format and
+   the /100 suffix already say what each number is, which frees the width
+   they used to take for the bar. Name/Duration/Score are auto-sized to
+   whatever they actually need; the bar is the only flexible (1fr) zone,
+   taking whatever's left and ending flush with the row's own padding
+   (never touching the card edge). Deliberately never gets the crimson
+   .habit-row.complete treatment — Sleep is a measured metric, not a chosen
+   action, and the cyan bar is its own distinct visual language. */
+.habit-row.sleep-row { display: grid; grid-template-columns: auto auto auto 1fr; align-items: center; column-gap: var(--space-3); }
+.sleep-duration-input {
+  background: #0f1012;
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 3px 6px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color-scheme: dark; /* keeps the browser's own clock icon/segment styling legible against the dark row */
+}
+.sleep-score-control { flex: 0 0 auto; display: flex; align-items: baseline; gap: 2px; white-space: nowrap; }
+.sleep-score-control input {
+  background: #0f1012;
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 3px 2px;
+  font-size: 13px;
+  text-align: right;
+  width: 32px;
+}
+.sleep-unit { font-size: 11px; color: var(--text-dim); flex: 0 0 auto; }
+.sleep-bar-wrap { min-width: 0; }
+.sleep-bar-wrap .progress-track { width: 100%; }
+
+/* ---------- This Week: one compact row per activity ---------- */
+
+/* The row background spans the full panel width regardless of how the
+   content inside it clusters — it's the outer block-level wrapper, not
+   something that shrinks to fit its content. */
+.weekly-habit { border-radius: 8px; background: var(--surface-2); padding: 5px 10px; }
+.weekly-habit.complete { background: var(--accent-tint); }
+/* name | fraction | detail form one tight left-hand cluster (fixed/capped
+   widths, no distributing space between them, detail truncating rather than
+   wrapping); the 1fr track is the only flexible gap, deliberately placed
+   between that cluster and LOG — so LOG lands at the row's far-right edge
+   and (since every row shares this same template) every LOG button lines up
+   in a straight vertical column regardless of row content. This is a fixed,
+   one-row-per-activity summary: logging a session updates this row in place
+   (counter, tint, latest-session text) and never appends anything below it
+   — deleting/inspecting a specific session lives in Entries, not here. */
+.weekly-habit .summary {
+  display: grid;
+  grid-template-columns: 108px 40px minmax(0, 108px) 1fr 20px 64px;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 26px;
+}
+.weekly-habit .name {
+  grid-column: 1;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.weekly-habit .fraction { grid-column: 2; font-size: 13px; color: var(--text); font-weight: 600; }
+.weekly-habit.complete .fraction { color: var(--accent-light); }
+.weekly-habit.complete .name { color: var(--muted); }
+.weekly-habit .detail {
+  grid-column: 3;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.weekly-habit .log-btn { grid-column: 6; height: 26px; padding: 0 10px; font-size: 11px; }
+/* FORGE should visually ask for attention only where work remains — once a
+   target's met, the button steps back to outlined/secondary instead of a
+   strong crimson fill implying something's still due. */
+.weekly-habit .log-btn.secondary {
+  background: transparent;
+  border: 1px solid var(--card-border);
+  color: var(--muted);
+}
+.weekly-habit .log-btn.secondary:hover { background: transparent; border-color: var(--accent-light); color: var(--accent-light); }
+
+button {
+  background: var(--accent);
+  border: none;
+  color: #f9eef1;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+button:hover { background: var(--accent-light); }
+
+/* ---------- Proof of Work ----------
+   Fills all remaining space below Today/This Week (flex:1 on a card that's
+   itself a flex column) — every region inside is sized by a ratio, not left
+   to shrink-to-content, so there's no dead space and nothing overflows.
+
+   Two columns: LEFT (45%, consistency + secondary evidence) / RIGHT (55%,
+   primary evidence). Left splits vertically: Forge Grid + stats on top
+   (~62%), Weight + Running underneath (~38%). Forge Grid + stats splits
+   horizontally: grid ~65%, stats ~35%. Right stacks Exercise over Sleep,
+   split evenly — the two protagonists, matched in size. */
+#proof-card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+#proof-card h2 { flex: 0 0 auto; }
+
+.proof-layout { flex: 1 1 auto; min-height: 0; display: flex; gap: var(--space-3); margin-top: 6px; }
+
+.proof-left { flex: 45 1 0; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.primary-charts { flex: 55 1 0; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+
+.proof-body { flex: 62 1 0; min-height: 0; display: flex; align-items: stretch; gap: var(--space-3); }
+.secondary-charts { flex: 38 1 0; min-height: 0; display: flex; flex-direction: row; gap: var(--space-3); }
+
+/* Single source of truth for the grid's geometry — same ~13-week horizon
+   as before, but the cell size lives in one place so bumping it (or the
+   gap) can never leave the month/weekday labels out of alignment with the
+   grid itself. */
+.forge-grid-wrap {
+  --forge-cell: 27px;
+  --forge-gap: 4px;
+  flex: 65 1 0;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.forge-month-labels {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: var(--forge-cell);
+  gap: var(--forge-gap);
+  margin: 0 0 4px 22px; /* aligns over the grid, offset past the weekday-label column */
+  height: 13px;
+  flex: 0 0 auto;
+}
+.forge-month-labels span { font-size: 11px; font-weight: 600; color: var(--muted); }
+
+.forge-grid-body { display: flex; gap: var(--forge-gap); flex: 0 0 auto; }
+.forge-weekday-labels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--forge-gap);
+  justify-content: flex-start;
+}
+.forge-weekday-labels span {
+  width: 16px;
+  height: var(--forge-cell);
+  font-size: 10px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+}
+
+/* Weeks run left→right as columns, weekdays top→bottom as rows — cells are
+   appended in chronological (week-by-week) order and grid-auto-flow:column
+   lays them out down each column before moving to the next, so no manual
+   row/column placement is needed. ~13 weeks (12 complete + current) keeps
+   the ~3-month consistency horizon. */
+.forge-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(7, var(--forge-cell));
+  grid-auto-columns: var(--forge-cell);
+  gap: var(--forge-gap);
+}
+.forge-cell {
+  width: var(--forge-cell);
+  height: var(--forge-cell);
+  border-radius: 5px;
+  background: var(--effort-0);
+  transition: background-color 150ms ease;
+}
+.forge-cell.pretrack { background: var(--effort-pretrack); } /* before the habit existed — not a zero day */
+.forge-cell.level-1 { background: var(--effort-1); }
+.forge-cell.level-2 { background: var(--effort-2); }
+.forge-cell.level-3 { background: var(--effort-3); }
+.forge-cell.level-4 { background: var(--effort-4); }
+.forge-cell.level-5 { background: var(--effort-5); }
+.forge-cell.today { box-shadow: 0 0 0 1px var(--accent-light); }
+/* A fully-complete today gets a restrained gold accent — the one moment the
+   palette steps outside crimson, reserved for genuinely finishing the day. */
+.forge-cell.today.gold { background: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+
+/* The grid is the visualization; the stats support it — a narrower share,
+   not a card of its own competing for width. */
+.proof-stats {
+  flex: 35 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.proof-stats .consistency-heading { margin-bottom: 1px; }
+
+/* Wellness / Weekly goals: two compact progress bars, same visual language,
+   same width/height — deliberately smaller than a Today habit-row bar
+   (6px vs 7px) and never taller than a Forge Grid cell, so this whole block
+   stays a supporting summary, not a second visualization competing with
+   the grid. */
+.consistency-bar-row { display: flex; flex-direction: column; gap: 3px; }
+.consistency-bar-head { display: flex; justify-content: space-between; align-items: baseline; }
+.consistency-bar-head .label { font-size: 12px; font-weight: 600; color: var(--text); }
+.consistency-bar-head .value { font-size: 13px; font-weight: 800; color: var(--muted); }
+.consistency-track { flex: 0 0 auto; height: 6px; min-width: 0; }
+
+/* Days shown up / streak / perfect days: plain supporting evidence below
+   the two bars, set apart with a hairline rather than equal visual weight. */
+.consistency-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--card-border);
+}
+.proof-stats .stat { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; }
+.proof-stats .stat .label { color: var(--muted); }
+/* Default is neutral — zero shouldn't command attention. JS sets a brighter
+   inline color as each stat's underlying value actually earns it. */
+.proof-stats .stat .value { font-size: 16px; font-weight: 800; color: var(--muted); }
+
+/* All secondary charts render at once, no carousel — historical data
+   shouldn't hide behind slides. Weight/Running (.secondary-charts, a row)
+   and Exercise/Sleep (.primary-charts, a column) both split their container
+   evenly among however many chart-boxes they hold — equal size within each
+   tier is the point; the tiers themselves differ (see above). */
+.charts { display: flex; min-width: 0; } /* .primary-charts/.secondary-charts each set their own gap + flex-direction below */
+.charts .chart-box { flex: 1 1 0; }
+.chart-box {
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding: var(--space-2) var(--space-3);
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.chart-box h4 { margin: 0; font-size: 12px; color: var(--muted); font-weight: 600; flex: 0 0 auto; }
+.chart-box canvas { flex: 1; min-height: 0; }
+.chart-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.chart-box-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: 6px;
+}
+.small-btn { padding: 6px 12px; font-size: 12px; }
+
+/* Weight is a body measurement, not performance — a small eyebrow label sets
+   it apart from the work-performed charts without introducing another color.
+   Same treatment as EXERCISE/WELLNESS (.section-heading) for consistency. */
+.chart-box-head .eyebrow {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+/* ---------- Modals ---------- */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 10;
+}
+.modal[hidden] { display: none; }
+.modal-content {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: var(--space-6);
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.modal-content.small { max-width: 320px; }
+.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-3); }
+.modal-header h2 { margin: 0; font-size: 18px; }
+
+.habit-list { display: flex; flex-direction: column; gap: var(--space-2); margin-bottom: var(--space-3); }
+.habit-list-row { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2); background: var(--surface-2); border-radius: 8px; font-size: 13px; }
+.habit-list-row .name { flex: 1; }
+.habit-list-row .meta { color: var(--muted); font-size: 12px; }
+.habit-list-row button { background: transparent; border: 1px solid var(--card-border); color: var(--muted); padding: 4px 8px; font-weight: 500; }
+.habit-list-row button:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ---------- Garmin sync ---------- */
+
+.garmin-range-form { display: flex; align-items: flex-end; gap: var(--space-2); margin-bottom: var(--space-3); flex-wrap: wrap; }
+.garmin-range-form label { display: flex; flex-direction: column; gap: var(--space-1); font-size: 13px; color: var(--muted); flex: 1 1 120px; }
+.garmin-range-form input {
+  background: #0f1012;
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+.garmin-status { font-size: 13px; color: var(--muted); padding: var(--space-2) 0; }
+.garmin-status.error { color: var(--accent-light); }
+
+.garmin-section { margin-bottom: var(--space-3); }
+.garmin-section h3 { margin: 0 0 var(--space-2); font-size: 14px; }
+.garmin-list { display: flex; flex-direction: column; gap: var(--space-2); max-height: 24vh; overflow-y: auto; }
+.garmin-empty { color: var(--muted); font-size: 13px; }
+.garmin-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--surface-2);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.garmin-row .detail { flex: 1; color: var(--muted); }
+.garmin-row .detail strong { color: var(--text); font-weight: 600; }
+.garmin-row .status-tag {
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+#garmin-import-btn { margin-top: var(--space-2); }
+
+.entries-tabs { display: flex; gap: var(--space-2); margin-bottom: var(--space-3); }
+.entries-tabs .tab-btn {
+  background: transparent;
+  border: 1px solid var(--card-border);
+  color: var(--muted);
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.entries-tabs .tab-btn.active { color: var(--text); border-color: var(--accent); background: var(--surface-2); }
+
+/* Secondary, smaller row nested under the Habit Logs tab — a plain
+   underline instead of a pill so it reads as "filtering within this tab",
+   not a second peer-level tab bar. */
+.entries-subtabs { display: flex; gap: var(--space-3); margin-bottom: var(--space-2); border-bottom: 1px solid var(--card-border); }
+.entries-subtabs .subtab-btn {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--muted);
+  padding: 4px 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 0;
+}
+.entries-subtabs .subtab-btn:hover { color: var(--text); background: transparent; }
+.entries-subtabs .subtab-btn.active { color: var(--accent-light); border-bottom-color: var(--accent-light); }
+
+.entries-panel { max-height: 55vh; overflow-y: auto; }
+.entry-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.entry-empty { color: var(--muted); font-size: 13px; padding: var(--space-3) 0; }
+.entry-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--surface-2);
+  border-radius: 8px;
+  font-size: 13px;
+}
+.entry-row .entry-name { flex: 0 0 auto; min-width: 90px; }
+.entry-row input[type="date"] { flex: 1 1 auto; min-width: 130px; }
+.entry-row input[type="number"] { width: 80px; }
+.entry-row input {
+  background: #0f1012;
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.entry-row .entry-unit { color: var(--muted); font-size: 12px; min-width: 24px; }
+.entry-row .entry-extra { display: flex; gap: 4px; }
+.entry-row .entry-extra input[type="number"] { width: 52px; }
+.entry-row button {
+  background: transparent;
+  border: 1px solid var(--card-border);
+  color: var(--muted);
+  padding: 4px 8px;
+  font-weight: 500;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.entry-row button:hover { color: var(--accent); border-color: var(--accent); }
+
+.stacked-form { display: flex; flex-direction: column; gap: var(--space-3); }
+.stacked-form label { display: flex; flex-direction: column; gap: var(--space-1); font-size: 13px; color: var(--muted); }
+.stacked-form input, .stacked-form select {
+  background: #0f1012;
+  border: 1px solid var(--card-border);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+/* Optional per-habit extras (Running: avg pace/HR/cadence) — a tidy row of
+   small fields rather than three more full-width stacked-form rows. */
+.session-extra-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)); /* minmax(0, ...) lets tracks actually shrink to the modal's width — plain 1fr won't shrink past its label text's natural width, so it overflowed the modal */
+  gap: var(--space-2);
+}
+.session-extra-fields label { display: flex; flex-direction: column; gap: var(--space-1); font-size: 12px; color: var(--muted); min-width: 0; }
+.session-extra-fields input { width: 100%; min-width: 0; }
+
+@media (max-width: 1100px) {
+  .top-row { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+  .top-bar, .page { padding-left: 16px; padding-right: 16px; }
+}

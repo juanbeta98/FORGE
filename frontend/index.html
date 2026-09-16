@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Forge</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header class="top-bar">
+    <div class="brand"><img src="favicon.svg" class="logo-mark" alt="" width="20" height="20" />FORGE</div>
+    <div class="status-metrics" id="status-metrics">
+      <span id="status-date">—</span>
+      <span class="status-stats">
+        <span id="status-today">TODAY —</span>
+        <span id="status-week">WEEK —</span>
+        <span id="status-streak">STREAK —</span>
+      </span>
+    </div>
+    <button class="quote-box" id="quote-box" title="Click for another">
+      <span class="quote-line">
+        <span class="quote-text" id="quote-text">Loading…</span>
+        <span class="quote-author" id="quote-author"></span>
+      </span>
+    </button>
+    <button id="entries-btn" class="icon-btn" title="Edit raw entries">📝 Entries</button>
+    <button id="garmin-sync-btn" class="icon-btn" title="Import sleep + runs from Garmin Connect">⟲ Garmin Sync</button>
+    <button id="settings-btn" class="icon-btn" title="Manage habits">⚙ Settings</button>
+  </header>
+
+  <main class="page">
+    <div class="top-row">
+      <section class="card" id="daily-card">
+        <div class="card-head">
+          <h2>Today</h2>
+          <span class="card-badge" id="today-badge">—%</span>
+        </div>
+        <div class="today-columns" id="daily-rows"></div>
+      </section>
+
+      <section class="card" id="weekly-card">
+        <div class="card-head">
+          <h2>This Week</h2>
+          <span class="card-badge" id="week-badge">—/— targets</span>
+        </div>
+        <div class="rows" id="weekly-rows"></div>
+      </section>
+    </div>
+
+    <section class="card" id="proof-card">
+      <h2>Proof of Work</h2>
+      <div class="proof-layout">
+        <div class="proof-left">
+          <div class="proof-body">
+            <div class="forge-grid-wrap">
+              <div class="forge-month-labels" id="forge-months"></div>
+              <div class="forge-grid-body">
+                <div class="forge-weekday-labels">
+                  <span>M</span><span></span><span>W</span><span></span><span>F</span><span></span><span>S</span>
+                </div>
+                <div class="forge-grid" id="forge-grid"></div>
+              </div>
+            </div>
+            <div class="proof-stats" id="proof-stats"></div>
+          </div>
+          <!-- Secondary evidence: Weight + Running (and anything else that
+               isn't Exercise/Sleep), equal-sized, smaller than the two
+               primary charts on the right. -->
+          <div class="charts secondary-charts" id="secondary-charts-container"></div>
+        </div>
+        <!-- Primary evidence: Exercise (work) + Sleep (recovery), stacked,
+             matched in width and height — the two protagonists. -->
+        <div class="charts primary-charts" id="primary-charts-container"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="settings-modal" class="modal" hidden>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Manage Habits</h2>
+        <button id="close-settings" class="icon-btn">✕</button>
+      </div>
+
+      <div id="habit-list" class="habit-list"></div>
+
+      <h3>Add a new habit</h3>
+      <form id="habit-form" class="stacked-form">
+        <label>Name <input type="text" id="h-name" required /></label>
+        <label>Cadence
+          <select id="h-category">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+          </select>
+        </label>
+        <label id="h-section-label">Group (daily only, e.g. Exercise, Wellness)
+          <input type="text" id="h-section" placeholder="Exercise, Wellness…" />
+        </label>
+        <label>Type
+          <select id="h-type">
+            <option value="numeric">Numeric (target count)</option>
+            <option value="boolean">Checkbox (done / not done)</option>
+          </select>
+        </label>
+        <label id="h-target-label">Target value <input type="number" step="0.01" min="0" id="h-target" value="1" /></label>
+        <label id="h-unit-label">Unit (optional) <input type="text" id="h-unit" placeholder="reps, pages…" /></label>
+        <label id="h-freq-label" hidden>Sessions per week <input type="number" step="1" min="1" id="h-freq" value="1" /></label>
+        <label id="h-metric-label" hidden>Track a number per session? (optional, e.g. km)
+          <input type="text" id="h-metric" placeholder="km, kg, min…" />
+        </label>
+        <button type="submit">Add habit</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="weight-modal" class="modal" hidden>
+    <div class="modal-content small">
+      <div class="modal-header">
+        <h2>Log Weight</h2>
+        <button id="close-weight-modal" class="icon-btn">✕</button>
+      </div>
+      <form id="weight-form" class="stacked-form">
+        <label>Weight (kg) <input type="number" step="0.01" min="0" id="weight-input" required /></label>
+        <label>Date <input type="date" id="weight-date" /></label>
+        <button type="submit">Log</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="session-modal" class="modal" hidden>
+    <div class="modal-content small">
+      <div class="modal-header">
+        <h2 id="session-modal-title">Log Session</h2>
+        <button id="close-session-modal" class="icon-btn">✕</button>
+      </div>
+      <form id="session-form" class="stacked-form">
+        <label>Date <input type="date" id="session-date" required /></label>
+        <label id="session-metric-label" hidden><span id="session-metric-text">Amount</span>
+          <input type="number" step="0.01" min="0" id="session-metric" />
+        </label>
+        <div id="session-extra-fields" class="session-extra-fields" hidden></div>
+        <button type="submit">Log</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="garmin-modal" class="modal" hidden>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Garmin Sync</h2>
+        <button id="close-garmin-modal" class="icon-btn">✕</button>
+      </div>
+
+      <form id="garmin-range-form" class="garmin-range-form">
+        <label>From <input type="date" id="garmin-start-date" required /></label>
+        <label>To <input type="date" id="garmin-end-date" required /></label>
+        <button type="submit" id="garmin-fetch-btn">Fetch</button>
+      </form>
+
+      <div id="garmin-status" class="garmin-status" hidden></div>
+
+      <div id="garmin-results" class="garmin-results" hidden>
+        <div class="garmin-section">
+          <h3>Sleep</h3>
+          <div id="garmin-sleep-list" class="garmin-list"></div>
+        </div>
+        <div class="garmin-section">
+          <h3>Runs</h3>
+          <div id="garmin-runs-list" class="garmin-list"></div>
+        </div>
+        <button type="button" id="garmin-import-btn">Import selected</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="entries-modal" class="modal" hidden>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Edit Entries</h2>
+        <button id="close-entries" class="icon-btn">✕</button>
+      </div>
+
+      <div class="entries-tabs" id="entries-tabs">
+        <button type="button" class="tab-btn active" data-tab="weight">Weight</button>
+        <button type="button" class="tab-btn" data-tab="logs">Habit Logs</button>
+      </div>
+
+      <div id="entries-weight-panel" class="entries-panel">
+        <div id="entries-weight-list" class="entry-list"></div>
+      </div>
+      <div id="entries-logs-panel" class="entries-panel" hidden>
+        <div class="entries-subtabs" id="entries-logs-subtabs">
+          <button type="button" class="subtab-btn active" data-subtab="all">All</button>
+          <button type="button" class="subtab-btn" data-subtab="exercise">Exercise</button>
+          <button type="button" class="subtab-btn" data-subtab="wellness">Wellness</button>
+          <button type="button" class="subtab-btn" data-subtab="weekly">Weekly</button>
+        </div>
+        <div id="entries-logs-list" class="entry-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
