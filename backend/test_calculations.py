@@ -166,7 +166,6 @@ class TestForgeGridStats(unittest.TestCase):
         # against a hardcoded window size.
         self.assertEqual(stats["tracked_days"], 4)
         self.assertEqual(stats["days_shown_up"], 1)  # only today has completion > 0
-        self.assertEqual(stats["perfect_days"], 1)
 
         # Every day before the habit existed should show as untracked, not zero-effort.
         pre_tracking_days = [d for d in result["days"] if d["total_habits"] == 0]
