@@ -111,11 +111,6 @@ body {
   white-space: nowrap;
 }
 #status-date { color: var(--muted); font-weight: 500; font-size: 13px; }
-.status-stats { display: flex; align-items: baseline; gap: 11px; }
-/* Neutral at zero, stepping toward the accent only as progress is actually
-   earned (color is set inline per-value in JS) — status text stays quieter
-   than the quote regardless. */
-#status-today, #status-week, #status-streak { color: var(--muted); font-size: 13px; font-weight: 700; }
 
 .quote-box {
   flex: 1 1 auto;
@@ -542,8 +537,14 @@ button:hover { background: var(--accent-light); }
    Two columns: LEFT (45%, consistency + secondary evidence) / RIGHT (55%,
    primary evidence). Left splits vertically: Forge Grid + stats on top
    (~62%), Weight + Running underneath (~38%). Forge Grid + stats splits
-   horizontally: grid ~65%, stats ~35%. Right stacks Exercise over Sleep,
-   split evenly — the two protagonists, matched in size. */
+   horizontally ~60/40 (was ~65/35) — both still flex-grow shares with a
+   zero basis (not content-sized), which matters: sizeForgeGrid (app.js)
+   measures .forge-grid-wrap's width to pick a cell size *before* any cells
+   exist for this render, so that width must come from a stable flex share,
+   never from the grid's own (momentarily empty) content. Nudging the ratio
+   costs the grid only ~1px of cell size — imperceptible — while giving
+   Consistency real extra room. Right stacks Exercise over Sleep, split
+   evenly — the two protagonists, matched in size. */
 #proof-card { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 #proof-card h2 { flex: 0 0 auto; }
 
@@ -552,17 +553,19 @@ button:hover { background: var(--accent-light); }
 .proof-left { flex: 45 1 0; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 .primary-charts { flex: 55 1 0; min-height: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
 
-.proof-body { flex: 62 1 0; min-height: 0; display: flex; align-items: stretch; gap: var(--space-3); }
+.proof-body { flex: 62 1 0; min-height: 0; display: flex; align-items: stretch; gap: var(--space-2); }
 .secondary-charts { flex: 38 1 0; min-height: 0; display: flex; flex-direction: row; gap: var(--space-3); }
 
 /* Single source of truth for the grid's geometry — same ~13-week horizon
    as before, but the cell size lives in one place so bumping it (or the
    gap) can never leave the month/weekday labels out of alignment with the
-   grid itself. */
+   grid itself. flex-basis 0 (a flex-grow share, not content-sized) is
+   required by sizeForgeGrid's measure-then-fill approach — see the
+   .proof-body comment above. */
 .forge-grid-wrap {
   --forge-cell: 27px;
   --forge-gap: 4px;
-  flex: 65 1 0;
+  flex: 62 1 0;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -626,47 +629,134 @@ button:hover { background: var(--accent-light); }
    palette steps outside crimson, reserved for genuinely finishing the day. */
 .forge-cell.today.gold { background: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
 
-/* The grid is the visualization; the stats support it — a narrower share,
-   not a card of its own competing for width. */
+/* The grid is the visualization; the stats support it — now ~40% of the
+   row (was ~35%) per the .proof-body comment above. Two tiers, each its own
+   flex-sized block (~55/45, see .consistency-top/.consistency-recent below)
+   told apart by spacing/typography rather than a nested card: Consistency
+   (adherence, top) and Last 30 days (accumulated evidence, bottom). */
 .proof-stats {
-  flex: 35 1 0;
+  flex: 38 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 8px;
+  gap: 10px;
   background: var(--surface-2);
   border-radius: 8px;
   padding: 10px 14px;
 }
 .proof-stats .consistency-heading { margin-bottom: 1px; }
 
-/* Wellness / Weekly goals: two compact progress bars, same visual language,
-   same width/height — deliberately smaller than a Today habit-row bar
-   (6px vs 7px) and never taller than a Forge Grid cell, so this whole block
-   stays a supporting summary, not a second visualization competing with
-   the grid. */
+/* The two tiers share .proof-stats's remaining height in ~55/45 proportion.
+   Both need min-height:0 so the ratio can actually take effect instead of
+   just falling back to each block's natural content size. */
+.consistency-top {
+  flex: 55 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+.consistency-recent {
+  flex: 45 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+/* Quieter than "CONSISTENCY" above — dimmer color, no bearing on the bold
+   accumulated numbers below it, which are the actual point of this tier. */
+.recent-heading { color: var(--text-dim); }
+
+/* Wellness / Weekly goals are the primary consistency indicators — kept
+   visually prominent (larger % than the secondary stats below) and
+   identical in size/alignment to each other. Deliberately smaller than a
+   Today habit-row bar (6px vs 7px) and never taller than a Forge Grid cell,
+   so this whole block stays a supporting summary, not a second
+   visualization competing with the grid. */
 .consistency-bar-row { display: flex; flex-direction: column; gap: 3px; }
 .consistency-bar-head { display: flex; justify-content: space-between; align-items: baseline; }
 .consistency-bar-head .label { font-size: 12px; font-weight: 600; color: var(--text); }
-.consistency-bar-head .value { font-size: 13px; font-weight: 800; color: var(--muted); }
+.consistency-bar-head .value { font-size: 15px; font-weight: 800; color: var(--muted); }
 .consistency-track { flex: 0 0 auto; height: 6px; min-width: 0; }
 
-/* Days shown up / streak / perfect days: plain supporting evidence below
-   the two bars, set apart with a hairline rather than equal visual weight. */
+/* Days shown up / streak: compact secondary rows below the bars — no bars
+   of their own, smaller/quieter than the Wellness/Weekly-goals values above,
+   set apart with a hairline (kept tight/short on purpose — a slightly
+   smaller gap than before the hairline, since this is the one seam in the
+   panel that had room to spare). Label/value columns align with each other
+   via the shared .stat/.label/.value classes (space-between within a
+   fixed-width row), so "3 days" and "127 days" both sit flush right
+   regardless of length. */
 .consistency-stats {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-top: 2px;
-  padding-top: 8px;
+  padding-top: 5px;
   border-top: 1px solid var(--card-border);
 }
-.proof-stats .stat { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; }
+.proof-stats .stat { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; }
 .proof-stats .stat .label { color: var(--muted); }
 /* Default is neutral — zero shouldn't command attention. JS sets a brighter
-   inline color as each stat's underlying value actually earns it. */
-.proof-stats .stat .value { font-size: 16px; font-weight: 800; color: var(--muted); }
+   inline color as each stat's underlying value actually earns it. Smaller
+   and lighter than the bars' % values above — secondary supporting evidence,
+   not a competing headline number. */
+.proof-stats .stat .value { font-size: 13px; font-weight: 700; color: var(--muted); }
+
+/* Last 30 days: accumulated evidence, not a goal — no bars, no bright
+   color. Two blocks, same 2-column grid/column-gap so they line up with
+   each other: .recent-totals-primary is Reps/Distance, stacked
+   number-over-label and the largest type in the panel (the headline
+   totals); .recent-totals-secondary is the 4 Wellness practice counts,
+   compact inline "count label" pairs — supporting totals, kept visually
+   quieter and tighter than the headline row above. */
+.recent-totals-primary {
+  margin-top: 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: var(--space-5);
+}
+.recent-total-tile {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.recent-total-tile .number { font-size: 24px; font-weight: 800; color: var(--text); line-height: 1.15; font-variant-numeric: tabular-nums; }
+.recent-total-tile .unit { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); }
+
+/* Inline "count label" pairs, not stacked — these read as one unit per
+   line, not a two-line stat tile. Same column grid as the Reps/Km row
+   above so both blocks' columns align; a small row-gap keeps the two
+   Wellness rows visibly tighter than the headline row, matching their
+   lower priority. */
+.recent-totals-secondary {
+  margin-top: 6px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: var(--space-5);
+  row-gap: 3px;
+}
+.recent-total-chip {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.recent-total-chip .count {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.recent-total-chip .label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* All secondary charts render at once, no carousel — historical data
    shouldn't hide behind slides. Weight/Running (.secondary-charts, a row)

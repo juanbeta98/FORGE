@@ -478,6 +478,66 @@ def calculate_weekly_goals_consistency(conn: sqlite3.Connection, days: int = 91)
     return total_completed / total_prescribed if total_prescribed else None
 
 
+RECENT_TOTALS_DAYS = 30
+
+
+def calculate_recent_totals(conn: sqlite3.Connection, days: int = RECENT_TOTALS_DAYS) -> dict:
+    """Trailing `days`-day rollups for the Consistency block: total exercise
+    reps volume, total km run, and session counts for the 4 selectable
+    Wellness practices (Journaling, Mobility, Yoga Nidra, Wim Hof Breathing)
+    — how much actually got done lately, which the Forge Grid's day-by-day
+    completion view doesn't surface on its own. A session only counts once
+    it's actually completed (value >= 1), same as calculate_wellness_
+    consistency — merely having selected a practice for the day doesn't
+    count. Always a fixed trailing window, independent of build_forge_grid_
+    data's own (configurable) horizon."""
+    end = date.today()
+    start = end - timedelta(days=days - 1)
+    start_s, end_s = start.isoformat(), end.isoformat()
+
+    exercise_ids = [h["id"] for h in list_habits(conn) if _is_exercise_habit(h)]
+    reps_volume = 0.0
+    if exercise_ids:
+        placeholders = ",".join("?" * len(exercise_ids))
+        row = conn.execute(
+            f"""SELECT COALESCE(SUM(value), 0) AS total FROM habit_logs
+                WHERE habit_id IN ({placeholders}) AND log_date BETWEEN ? AND ?""",
+            (*exercise_ids, start_s, end_s),
+        ).fetchone()
+        reps_volume = row["total"]
+
+    def sum_value(habit_name: str) -> float:
+        habit = get_habit_by_name(conn, habit_name)
+        if not habit:
+            return 0.0
+        row = conn.execute(
+            """SELECT COALESCE(SUM(value), 0) AS total FROM habit_logs
+               WHERE habit_id = ? AND log_date BETWEEN ? AND ?""",
+            (habit["id"], start_s, end_s),
+        ).fetchone()
+        return row["total"]
+
+    def session_count(habit_name: str) -> int:
+        habit = get_habit_by_name(conn, habit_name)
+        if not habit:
+            return 0
+        row = conn.execute(
+            """SELECT COUNT(*) AS c FROM habit_logs
+               WHERE habit_id = ? AND value >= 1 AND log_date BETWEEN ? AND ?""",
+            (habit["id"], start_s, end_s),
+        ).fetchone()
+        return row["c"]
+
+    return {
+        "reps_volume": reps_volume,
+        "km_ran": sum_value("Running"),
+        "journaling_sessions": session_count("Journaling"),
+        "mobility_sessions": session_count("Mobility Routine"),
+        "yoga_nidra_sessions": session_count("Yoga Nidra"),
+        "wim_hof_breathing_sessions": session_count("Wim Hof Breathing"),
+    }
+
+
 def build_forge_grid_data(conn: sqlite3.Connection, days: int = 91) -> dict:
     """`days` is interpreted as whole weeks (days // 7) — the grid is defined
     as N complete Monday-Sunday weeks plus the current in-progress week, not
@@ -506,10 +566,10 @@ def build_forge_grid_data(conn: sqlite3.Connection, days: int = 91) -> dict:
     stats = {
         "days_shown_up": sum(1 for c in tracked_completions if c > 0),
         "tracked_days": len(tracked),
-        "perfect_days": sum(1 for c in tracked_completions if c >= 1),
         "current_streak": calculate_current_streak(conn),
         "wellness_consistency": calculate_wellness_consistency(conn, days),
         "weekly_goals_consistency": calculate_weekly_goals_consistency(conn, days),
+        "recent_totals": calculate_recent_totals(conn),
     }
     return {"days": day_records, "stats": stats}
 

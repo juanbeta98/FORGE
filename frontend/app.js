@@ -236,7 +236,14 @@ function recomputeStreakFromDays(days) {
 // recomputed by a real /api/forge-grid fetch (loadForgeGrid), not this
 // instant client-side path. Cached here so an unrelated instant recompute
 // (e.g. typing a Pushups value) doesn't flash them to "no data" in between.
-let lastConsistencyExtras = { wellness_consistency: null, weekly_goals_consistency: null };
+// The 30-day rollups (reps volume, km ran, practice session counts) are the
+// same story — server-computed across a fixed trailing window, not derived
+// from forgeGridDays.
+let lastConsistencyExtras = {
+  wellness_consistency: null,
+  weekly_goals_consistency: null,
+  recent_totals: null,
+};
 
 function recomputeAndRenderProofStats() {
   if (!forgeGridDays.length) return null;
@@ -246,11 +253,9 @@ function recomputeAndRenderProofStats() {
     ...lastConsistencyExtras,
     days_shown_up: completions.filter((c) => c > 0).length,
     tracked_days: tracked.length,
-    perfect_days: completions.filter((c) => c >= 1).length,
     current_streak: recomputeStreakFromDays(forgeGridDays),
   };
   renderProofStats(stats);
-  document.getElementById("status-streak").textContent = `STREAK ${stats.current_streak}`;
   return stats;
 }
 
@@ -262,17 +267,11 @@ function updateHeaderAndBadges() {
   const todayColor = intensityTextColor(todayFraction);
 
   const todayBadge = document.getElementById("today-badge");
-  const statusToday = document.getElementById("status-today");
   todayBadge.textContent = `${todayPct}%`;
-  statusToday.textContent = `TODAY ${todayPct}%`;
   todayBadge.style.color = todayColor;
-  statusToday.style.color = todayColor;
 
   const week = computeWeekStatus(currentWeekly);
-  const statusWeek = document.getElementById("status-week");
   document.getElementById("week-badge").textContent = `${week.met}/${week.total} targets`;
-  statusWeek.textContent = `WEEK ${Math.round(week.fraction * 100)}%`;
-  statusWeek.style.color = intensityTextColor(week.fraction);
 
   if (todayForgeCell) {
     todayForgeCell.className = "forge-cell today";
@@ -319,6 +318,7 @@ async function loadForgeGrid() {
   lastConsistencyExtras = {
     wellness_consistency: data.stats.wellness_consistency,
     weekly_goals_consistency: data.stats.weekly_goals_consistency,
+    recent_totals: data.stats.recent_totals,
   };
   renderForgeGrid(forgeGridDays);
   updateHeaderAndBadges(); // now that todayForgeCell exists, paints it (and recomputes stats) with live data immediately
@@ -691,7 +691,10 @@ function buildHabitRow(habit, log, color) {
   const input = document.createElement("input");
   input.type = "number";
   input.min = "0";
-  input.step = "0.01";
+  // Exercise reps get bumped in chunks of 5 via the spinner arrows — that's
+  // how they're actually adjusted day to day, vs. typing an exact number.
+  // Every other numeric daily habit keeps fine-grained 0.01 steps.
+  input.step = isExercise ? "5" : "0.01";
   input.value = value;
 
   const progress = document.createElement("span");
@@ -1115,35 +1118,108 @@ function buildConsistencyBar(label, fraction) {
   return row;
 }
 
+// "Days shown up" earns green past 80% rather than riding the same
+// crimson-to-gold ramp as everything else — at that point it's read as a
+// solid, "done" result, not just more effort on the way to 100%.
+const DAYS_SHOWN_UP_GREEN_THRESHOLD = 0.8;
+function daysShownUpColor(fraction) {
+  if (fraction > DAYS_SHOWN_UP_GREEN_THRESHOLD) return "var(--neon-green)";
+  return intensityTextColor(fraction) || "";
+}
+
 function renderProofStats(stats) {
   const el = document.getElementById("proof-stats");
   el.innerHTML = "";
 
+  // Two tiers, each its own flex-sized block (see .consistency-top /
+  // .consistency-recent in style.css for the ~55/45 vertical split) —
+  // Consistency (adherence, top) vs Last 30 days (accumulated evidence,
+  // bottom).
+  const top = document.createElement("div");
+  top.className = "consistency-top";
+
   const heading = document.createElement("div");
   heading.className = "section-heading consistency-heading";
   heading.textContent = "Consistency";
-  el.appendChild(heading);
+  top.appendChild(heading);
 
-  el.appendChild(buildConsistencyBar("Wellness", stats.wellness_consistency));
-  el.appendChild(buildConsistencyBar("Weekly goals", stats.weekly_goals_consistency));
+  top.appendChild(buildConsistencyBar("Wellness", stats.wellness_consistency));
+  top.appendChild(buildConsistencyBar("Weekly goals", stats.weekly_goals_consistency));
 
   // Same principle as the header: zero is neutral, brightness is earned.
   // Streak has no natural 0..1 ceiling, so it's judged against a 2-week span.
   const statsList = document.createElement("div");
   statsList.className = "consistency-stats";
+  const daysShownUpFraction = stats.tracked_days ? stats.days_shown_up / stats.tracked_days : 0;
   const rows = [
-    ["Days shown up", `${stats.days_shown_up}/${stats.tracked_days}`, stats.tracked_days ? stats.days_shown_up / stats.tracked_days : 0],
-    ["Current streak", `${stats.current_streak} day${stats.current_streak === 1 ? "" : "s"}`, Math.min(stats.current_streak / 14, 1)],
-    ["Perfect days", `${stats.perfect_days}`, stats.tracked_days ? stats.perfect_days / stats.tracked_days : 0],
+    ["Days shown up", `${stats.days_shown_up}/${stats.tracked_days}`, daysShownUpColor(daysShownUpFraction)],
+    ["Current streak", `${stats.current_streak} day${stats.current_streak === 1 ? "" : "s"}`, intensityTextColor(Math.min(stats.current_streak / 14, 1)) || ""],
   ];
-  for (const [label, value, fraction] of rows) {
+  for (const [label, value, color] of rows) {
     const row = document.createElement("div");
     row.className = "stat";
     row.innerHTML = `<span class="label">${label}</span><span class="value">${value}</span>`;
-    row.querySelector(".value").style.color = intensityTextColor(fraction) || "";
+    row.querySelector(".value").style.color = color;
     statsList.appendChild(row);
   }
-  el.appendChild(statsList);
+  top.appendChild(statsList);
+  el.appendChild(top);
+
+  el.appendChild(buildRecentTotals(stats.recent_totals));
+}
+
+// Last-30-days rollups: accumulated EVIDENCE of work done, not another
+// adherence/target metric — deliberately no progress bars and no bright
+// color here (that's reserved for Consistency above). Two typographic
+// tiers, both using the same 2-column grid/gap so their columns line up:
+// Reps/Distance (largest — the headline totals, stacked number-over-label)
+// on top, then the 4 Wellness practice counts below as compact inline
+// "count label" pairs in a tight 2x2 grid — supporting totals, not
+// headline KPIs, so they read as one unit per line rather than two.
+// Always all 6 metrics, in the same positions, even at zero, so the layout
+// never shifts as data changes. Server-computed (build_forge_grid_data /
+// calculate_recent_totals) over a fixed trailing 30-day window, independent
+// of the grid's own (configurable) horizon and of the 15-day Exercise/Sleep
+// chart windows.
+function buildRecentTotals(totals) {
+  const wrap = document.createElement("div");
+  wrap.className = "consistency-recent";
+
+  const heading = document.createElement("div");
+  heading.className = "section-heading consistency-heading recent-heading";
+  heading.textContent = "Last 30 days";
+  wrap.appendChild(heading);
+
+  const primary = document.createElement("div");
+  primary.className = "recent-totals-primary";
+  const repsValue = totals ? Math.round(totals.reps_volume).toLocaleString() : "—";
+  const kmValue = totals ? totals.km_ran.toFixed(1) : "—";
+  primary.innerHTML = `
+    <div class="recent-total-tile"><span class="number">${repsValue}</span><span class="unit">Reps</span></div>
+    <div class="recent-total-tile"><span class="number">${kmValue}</span><span class="unit">Km</span></div>
+  `;
+  wrap.appendChild(primary);
+
+  // Fixed order/positions regardless of value — Journal, Mobility top row;
+  // Wim Hof, Nidra bottom row (shortened dashboard labels used only in this
+  // compact block — full names remain elsewhere).
+  const secondary = document.createElement("div");
+  secondary.className = "recent-totals-secondary";
+  const chips = [
+    ["Journal", totals ? totals.journaling_sessions : "—"],
+    ["Mobility", totals ? totals.mobility_sessions : "—"],
+    ["Wim Hof", totals ? totals.wim_hof_breathing_sessions : "—"],
+    ["Nidra", totals ? totals.yoga_nidra_sessions : "—"],
+  ];
+  for (const [label, count] of chips) {
+    const chip = document.createElement("div");
+    chip.className = "recent-total-chip";
+    chip.innerHTML = `<span class="count">${count}</span><span class="label">${label}</span>`;
+    secondary.appendChild(chip);
+  }
+  wrap.appendChild(secondary);
+
+  return wrap;
 }
 
 // ---------- Weight entry: a button opens a small modal, the chart is the record ----------
@@ -1418,6 +1494,7 @@ function renderSleepChart(habit, series) {
       backgroundColor: NEON_SLEEP_COLOR,
       borderRadius: 3,
       yAxisID: "yDuration",
+      order: 2, // Chart.js draws higher `order` first — keep the bars behind the score line
     },
     {
       type: "line",
@@ -1429,6 +1506,7 @@ function renderSleepChart(habit, series) {
       pointRadius: 3,
       tension: 0.25,
       yAxisID: "yScore",
+      order: 0, // drawn last — always on top of the duration bars, even when the score dips below the bar's top
     },
     {
       type: "line",
@@ -1439,6 +1517,7 @@ function renderSleepChart(habit, series) {
       borderWidth: 1,
       pointRadius: 0,
       yAxisID: "yDuration",
+      order: 1,
     },
   ];
 
