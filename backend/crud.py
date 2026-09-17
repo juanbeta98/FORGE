@@ -146,22 +146,32 @@ def upsert_log(conn: sqlite3.Connection, habit_id: int, log_date: str, value: fl
         )
         result_id = log_id
     elif habit["category"] == "daily":
-        existing = conn.execute(
-            "SELECT id FROM habit_logs WHERE habit_id = ? AND log_date = ?",
-            (habit_id, log_date),
-        ).fetchone()
-        if existing:
-            conn.execute(
-                "UPDATE habit_logs SET value = ?, value2 = ?, extra = ?, note = ?, target_at_time = ? WHERE id = ?",
-                (value, value2, extra_json, note, target_at_time, existing["id"]),
-            )
-            result_id = existing["id"]
-        else:
-            cur = conn.execute(
-                "INSERT INTO habit_logs (habit_id, log_date, value, value2, extra, note, target_at_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (habit_id, log_date, value, value2, extra_json, note, target_at_time),
-            )
-            result_id = cur.lastrowid
+        # BEGIN IMMEDIATE grabs the write lock before the existence check
+        # below runs, so a second overlapping request (the frontend fires
+        # more than one commit per field — debounce, blur, Enter) blocks
+        # here instead of racing this one: both connections would otherwise
+        # read "no existing row" and INSERT twice for the same habit+day.
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            existing = conn.execute(
+                "SELECT id FROM habit_logs WHERE habit_id = ? AND log_date = ?",
+                (habit_id, log_date),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE habit_logs SET value = ?, value2 = ?, extra = ?, note = ?, target_at_time = ? WHERE id = ?",
+                    (value, value2, extra_json, note, target_at_time, existing["id"]),
+                )
+                result_id = existing["id"]
+            else:
+                cur = conn.execute(
+                    "INSERT INTO habit_logs (habit_id, log_date, value, value2, extra, note, target_at_time) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (habit_id, log_date, value, value2, extra_json, note, target_at_time),
+                )
+                result_id = cur.lastrowid
+        except Exception:
+            conn.rollback()
+            raise
     else:
         # weekly habit: each call adds a new session entry
         cur = conn.execute(
@@ -182,8 +192,12 @@ def delete_log(conn: sqlite3.Connection, log_id: int) -> bool:
 
 
 def get_logs_for_date(conn: sqlite3.Connection, log_date: str) -> list:
+    # Ordered by id so that if a stray duplicate row ever exists for the
+    # same (habit_id, log_date) — e.g. leftover from before upsert_log
+    # serialized its writes — every caller consistently resolves to the
+    # same "first" row, the same one get_logs_in_range/[0] picks below.
     rows = conn.execute(
-        "SELECT * FROM habit_logs WHERE log_date = ?", (log_date,)
+        "SELECT * FROM habit_logs WHERE log_date = ? ORDER BY id", (log_date,)
     ).fetchall()
     return [row_to_dict(r) for r in rows]
 
@@ -330,7 +344,12 @@ def calculate_daily_completion(conn: sqlite3.Connection, day: date) -> dict:
     day_type = get_day_type(conn, day)
 
     logs = get_logs_for_date(conn, day_str)
-    log_map = {l["habit_id"]: l for l in logs}
+    # get_logs_for_date is ordered by id — build the map keeping the FIRST
+    # (lowest-id) row per habit so a stray duplicate can't make this
+    # disagree with get_logs_in_range's logs[0] on /api/logs/today.
+    log_map = {}
+    for l in logs:
+        log_map.setdefault(l["habit_id"], l)
 
     if is_today:
         # Wellness practices are excluded here too (same reason as
@@ -596,10 +615,16 @@ def get_habit_daily_series(conn: sqlite3.Connection, habit_id: int, days: int = 
     start = end - timedelta(days=days - 1)
     rows = conn.execute(
         """SELECT log_date, value, value2, target_at_time FROM habit_logs
-           WHERE habit_id = ? AND log_date BETWEEN ? AND ?""",
+           WHERE habit_id = ? AND log_date BETWEEN ? AND ?
+           ORDER BY id""",
         (habit_id, start.isoformat(), end.isoformat()),
     ).fetchall()
-    row_by_date = {r["log_date"]: r for r in rows}
+    # Ordered by id, keeping the FIRST row per date — same resolution rule
+    # as get_logs_for_date/get_logs_in_range, so the chart can never disagree
+    # with the number box over a stray duplicate row for one day.
+    row_by_date = {}
+    for r in rows:
+        row_by_date.setdefault(r["log_date"], r)
 
     series = []
     day = start

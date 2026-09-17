@@ -27,10 +27,16 @@ const todayStr = () => {
 
 function debounce(fn, ms) {
   let t;
-  return (...args) => {
+  const wrapped = (...args) => {
     clearTimeout(t);
     t = setTimeout(() => fn(...args), ms);
   };
+  // Lets an immediate trigger (blur, Enter) call off a pending debounced
+  // fire — without this, an old value could still commit ~500ms later
+  // after the immediate one already saved the current value, and the two
+  // overlapping requests can race into duplicate habit_logs rows.
+  wrapped.cancel = () => clearTimeout(t);
+  return wrapped;
 }
 
 const charts = {}; // chart key -> Chart instance
@@ -632,7 +638,7 @@ function buildHabitRow(habit, log, color) {
     track.appendChild(fill);
     barWrap.appendChild(track);
 
-    const commit = async () => {
+    const doCommit = async () => {
       const d = hhmmToDecimalHours(durationInput.value);
       const s = parseFloat(scoreInput.value) || 0;
       await api("/api/logs", {
@@ -642,6 +648,15 @@ function buildHabitRow(habit, log, color) {
       updateLocalDailyLog(habit.id, d, s);
       fill.style.width = `${sleepScoreFraction(s) * 100}%`;
     };
+    // Duration and score share one commit, and blur/Enter/debounce can all
+    // reach it — chaining onto commitChain keeps saves sequential instead of
+    // letting two overlapping requests race into duplicate habit_logs rows.
+    let commitChain = Promise.resolve();
+    const commit = () => {
+      debouncedCommit.cancel();
+      commitChain = commitChain.then(doCommit, doCommit);
+      return commitChain;
+    };
     const debouncedCommit = debounce(commit, 500);
 
     for (const input of [durationInput, scoreInput]) {
@@ -650,7 +665,9 @@ function buildHabitRow(habit, log, color) {
       input.addEventListener("keydown", (e) => {
         if (e.key !== "Enter") return;
         e.preventDefault();
-        commit();
+        // Don't also commit() here — moving/removing focus below fires
+        // this same input's blur listener synchronously, which commits.
+        // Calling both was firing two overlapping saves per Enter press.
         const next = numericInputsInOrder[numericInputsInOrder.indexOf(input) + 1];
         if (next) { next.focus(); next.select(); } else input.blur();
       });
@@ -703,7 +720,7 @@ function buildHabitRow(habit, log, color) {
   // (Exercise → reps), and it's still shown in Settings where it matters.
   progress.textContent = excludedToday ? "not tracked today" : `/${effectiveTarget}`;
 
-  const commit = async () => {
+  const doCommit = async () => {
     const v = parseFloat(input.value) || 0;
     await api("/api/logs", {
       method: "POST",
@@ -713,6 +730,16 @@ function buildHabitRow(habit, log, color) {
     fill.style.width = `${Math.min((v / (effectiveTarget ?? habit.target_value)) * 100, 100)}%`;
     row.classList.toggle("complete", !excludedToday && v >= effectiveTarget);
   };
+  // input/blur/Enter can all reach this — chaining onto commitChain keeps
+  // saves sequential instead of letting two overlapping requests race into
+  // duplicate habit_logs rows (see backend upsert_log's BEGIN IMMEDIATE,
+  // which only closes half of this race without this frontend fix).
+  let commitChain = Promise.resolve();
+  const commit = () => {
+    debouncedCommit.cancel();
+    commitChain = commitChain.then(doCommit, doCommit);
+    return commitChain;
+  };
   const debouncedCommit = debounce(commit, 500);
 
   input.addEventListener("input", debouncedCommit);
@@ -720,7 +747,9 @@ function buildHabitRow(habit, log, color) {
   input.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
-    commit();
+    // Don't also commit() here — moving/removing focus below fires this
+    // same input's blur listener synchronously, which commits. Calling
+    // both was firing two overlapping saves per Enter press.
     const next = numericInputsInOrder[numericInputsInOrder.indexOf(input) + 1];
     if (next) { next.focus(); next.select(); } else input.blur();
   });
